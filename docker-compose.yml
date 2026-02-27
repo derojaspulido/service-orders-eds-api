@@ -1,31 +1,51 @@
-
 services:
+
   postgres_service_orders:
     image: postgres:16
     container_name: postgres_service_orders
+    restart: unless-stopped
+
     environment:
-      POSTGRES_DB: postgres
+      POSTGRES_DB: service_orders
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+
     ports:
       - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d service_orders"]
       interval: 5s
+      timeout: 5s
       retries: 5
 
   backend_service_orders:
     build:
       context: .
       dockerfile: Dockerfile
+
     container_name: backend_service_orders
+    restart: unless-stopped
+
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres_service_orders:5432/postgres
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      DB_HOST: postgres_service_orders
+      DB_PORT: 5432
+      DB_NAME: service_orders
+      DB_USER: postgres
+      DB_PASS: postgres
+
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_PROFILES_ACTIVE: docker
+
     ports:
       - "8080:8080"
+
     depends_on:
       postgres_service_orders:
         condition: service_healthy
+
+volumes:
+  postgres_data:

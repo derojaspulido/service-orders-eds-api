@@ -1,23 +1,31 @@
 package com.backenEDS.mapper;
 
-import com.backenEDS.domain.StationOrder;
-import com.backenEDS.dto.StationOrderRequestDTO;
-import com.backenEDS.dto.StationOrderResponseDTO;
 import org.mapstruct.Mapper;
-import org.mapstruct.MappingTarget;
-import org.mapstruct.factory.Mappers;
+import org.mapstruct.Mapping;
 
+import com.backenEDS.domain.StationOrder;
+import com.backenEDS.dto.CreateStationOrderRequest;
+import com.backenEDS.dto.StationOrderResponse;
+
+/**
+ * Mapper responsible for converting between
+ * StationOrder entity and DTOs.
+ */
 @Mapper(componentModel = "spring")
 public interface StationOrderMapper {
 
-    StationOrderMapper INSTANCE = Mappers.getMapper(StationOrderMapper.class);
+    /**
+     * Converts CreateStationOrderRequest to StationOrder entity.
+     * id, createdAt and updatedAt are managed automatically.
+     */
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    StationOrder toEntity(CreateStationOrderRequest request);
 
-    // DTO → Entity
-    StationOrder toEntity(StationOrderRequestDTO dto);
-
-    // Entity → DTO
-    StationOrderResponseDTO toDto(StationOrder entity);
-
-    // Actualizar status solo en Entity
-    void updateStatus(@MappingTarget StationOrder entity, StationOrderRequestDTO dto);
+    /**
+     * Converts StationOrder entity to response DTO.
+     */
+    StationOrderResponse toDto(StationOrder entity);
 }

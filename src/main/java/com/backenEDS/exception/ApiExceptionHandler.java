@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -12,57 +11,78 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.context.request.WebRequest;
 
+/**
+ * Global exception handler for REST API.
+ * 
+ * Implements RFC 7807 ProblemDetail structure.
+ */
 @ControllerAdvice
 public class ApiExceptionHandler {
 
-    /** Maneja validaciones @Valid */
+    /**
+     * Handles validation errors triggered by @Valid.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Object> handleValidationExceptions(MethodArgumentNotValidException ex, WebRequest request) {
+    public ResponseEntity<ProblemDetail> handleValidationExceptions(
+            MethodArgumentNotValidException ex) {
+
         Map<String, String> errors = new HashMap<>();
+
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
             errors.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
 
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        problem.setTitle("Validación fallida");
-        problem.setDetail(errors.toString());
+        problem.setTitle("Validation failed");
+        problem.setDetail("One or more fields contain invalid values");
+        problem.setProperty("errors", errors);
         problem.setProperty("timestamp", Instant.now());
 
-        return new ResponseEntity<>(problem, new HttpHeaders(), HttpStatus.BAD_REQUEST);
+        return ResponseEntity.badRequest().body(problem);
     }
 
-    /** Maneja recursos no encontrados */
+    /**
+     * Handles resource not found exceptions.
+     */
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Object> handleNotFound(ResourceNotFoundException ex, WebRequest request) {
+    public ResponseEntity<ProblemDetail> handleNotFound(
+            ResourceNotFoundException ex) {
+
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
-        problem.setTitle("Recurso no encontrado");
+        problem.setTitle("Resource not found");
         problem.setDetail(ex.getMessage());
         problem.setProperty("timestamp", Instant.now());
 
-        return new ResponseEntity<>(problem, new HttpHeaders(), HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
-    /** Maneja errores de negocio u otros */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Object> handleIllegalArgs(IllegalArgumentException ex, WebRequest request) {
+    /**
+     * Handles business rule violations.
+     */
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ProblemDetail> handleBusinessException(
+            BusinessException ex) {
+
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        problem.setTitle("Regla de negocio violada");
+        problem.setTitle("Business rule violation");
         problem.setDetail(ex.getMessage());
         problem.setProperty("timestamp", Instant.now());
 
-        return new ResponseEntity<>(problem, new HttpHeaders(), HttpStatus.BAD_REQUEST);
+        return ResponseEntity.badRequest().body(problem);
     }
 
-    /** Maneja cualquier otra excepción */
+    /**
+     * Handles unexpected server errors.
+     */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleAll(Exception ex, WebRequest request) {
+    public ResponseEntity<ProblemDetail> handleAll(Exception ex) {
+
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-        problem.setTitle("Error interno del servidor");
-        problem.setDetail(ex.getMessage());
+        problem.setTitle("Internal server error");
+        problem.setDetail("An unexpected error occurred");
         problem.setProperty("timestamp", Instant.now());
 
-        return new ResponseEntity<>(problem, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
     }
 }

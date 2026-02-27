@@ -3,25 +3,28 @@ package com.backenEDS.service;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import static org.mockito.Mockito.when;
 import org.mockito.MockitoAnnotations;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 import com.backenEDS.domain.StationOrder;
 import com.backenEDS.domain.enums.OrderStatus;
 import com.backenEDS.domain.enums.OrderType;
-import com.backenEDS.dto.StationOrderRequestDTO;
-import com.backenEDS.dto.StationOrderResponseDTO;
-import com.backenEDS.dto.StationOrderStatusUpdateDTO;
+import com.backenEDS.dto.CreateStationOrderRequest;
+import com.backenEDS.dto.StationOrderResponse;
+import com.backenEDS.dto.UpdateStationOrderStatusRequest;
+import com.backenEDS.exception.BusinessException;
 import com.backenEDS.exception.ResourceNotFoundException;
 import com.backenEDS.mapper.StationOrderMapper;
 import com.backenEDS.repository.StationOrderRepository;
@@ -38,7 +41,6 @@ class StationOrderServiceTest {
     private StationOrderService service;
 
     private StationOrder orderEntity;
-    private StationOrderResponseDTO orderDTO;
 
     @BeforeEach
     void setup() {
@@ -49,73 +51,95 @@ class StationOrderServiceTest {
         orderEntity.setStationId("S001");
         orderEntity.setType(OrderType.INVOICE);
         orderEntity.setStatus(OrderStatus.CREATED);
-
-        orderDTO = new StationOrderResponseDTO();
-        orderDTO.setId(orderEntity.getId());
-        orderDTO.setStationId(orderEntity.getStationId());
-        orderDTO.setType(orderEntity.getType());
-        orderDTO.setStatus(orderEntity.getStatus());
     }
 
     @Test
     void createOrder_ShouldReturnDTO() {
-        StationOrderRequestDTO requestDTO = new StationOrderRequestDTO();
+
+        CreateStationOrderRequest requestDTO = new CreateStationOrderRequest();
         requestDTO.setStationId("S001");
         requestDTO.setType(OrderType.INVOICE);
-        requestDTO.setStatus(OrderStatus.CREATED);
 
         when(mapper.toEntity(requestDTO)).thenReturn(orderEntity);
         when(repository.save(orderEntity)).thenReturn(orderEntity);
-        when(mapper.toDto(orderEntity)).thenReturn(orderDTO);
+        when(mapper.toDto(orderEntity)).thenAnswer(inv -> {
+            StationOrder entity = inv.getArgument(0);
+            StationOrderResponse dto = new StationOrderResponse();
+            dto.setId(entity.getId());
+            dto.setStationId(entity.getStationId());
+            dto.setType(entity.getType());
+            dto.setStatus(entity.getStatus());
+            return dto;
+        });
 
-        StationOrderResponseDTO result = service.createOrder(requestDTO);
+        StationOrderResponse result = service.createOrder(requestDTO);
+
         assertNotNull(result);
-        assertEquals(orderDTO.getStationId(), result.getStationId());
+        assertEquals("S001", result.getStationId());
     }
 
     @Test
     void updateStatus_FromDoneToInProgress_ShouldThrow() {
-        orderEntity.setStatus(OrderStatus.DONE);
-        when(repository.findById(orderEntity.getId())).thenReturn(Optional.of(orderEntity));
 
-        StationOrderStatusUpdateDTO updateDTO = new StationOrderStatusUpdateDTO();
+        orderEntity.setStatus(OrderStatus.DONE);
+        when(repository.findById(orderEntity.getId()))
+                .thenReturn(Optional.of(orderEntity));
+
+        UpdateStationOrderStatusRequest updateDTO
+                = new UpdateStationOrderStatusRequest();
         updateDTO.setStatus(OrderStatus.IN_PROGRESS);
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> service.updateStatus(orderEntity.getId(), updateDTO));
     }
 
     @Test
-    void updateStatus_FromCancelled_ShouldNotChange() {
-        orderEntity.setStatus(OrderStatus.CANCELLED);
-        when(repository.findById(orderEntity.getId())).thenReturn(Optional.of(orderEntity));
-        when(mapper.toDto(orderEntity)).thenReturn(orderDTO);
+    void updateStatus_FromCancelled_ShouldThrow() {
 
-        StationOrderStatusUpdateDTO updateDTO = new StationOrderStatusUpdateDTO();
+        orderEntity.setStatus(OrderStatus.CANCELLED);
+
+        when(repository.findById(orderEntity.getId()))
+                .thenReturn(Optional.of(orderEntity));
+
+        UpdateStationOrderStatusRequest updateDTO
+                = new UpdateStationOrderStatusRequest();
         updateDTO.setStatus(OrderStatus.IN_PROGRESS);
 
-        StationOrderResponseDTO result = service.updateStatus(orderEntity.getId(), updateDTO);
-        assertEquals(OrderStatus.CANCELLED, result.getStatus());
+        assertThrows(BusinessException.class,
+                () -> service.updateStatus(orderEntity.getId(), updateDTO));
     }
 
     @Test
     void updateStatus_ValidTransition_ShouldUpdate() {
-        orderEntity.setStatus(OrderStatus.CREATED);
-        when(repository.findById(orderEntity.getId())).thenReturn(Optional.of(orderEntity));
-        when(repository.save(orderEntity)).thenReturn(orderEntity);
-        when(mapper.toDto(orderEntity)).thenReturn(orderDTO);
 
-        StationOrderStatusUpdateDTO updateDTO = new StationOrderStatusUpdateDTO();
+        orderEntity.setStatus(OrderStatus.CREATED);
+
+        when(repository.findById(orderEntity.getId()))
+                .thenReturn(Optional.of(orderEntity));
+
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        when(mapper.toDto(any())).thenAnswer(inv -> {
+            StationOrder entity = inv.getArgument(0);
+            StationOrderResponse dto = new StationOrderResponse();
+            dto.setStatus(entity.getStatus());
+            return dto;
+        });
+
+        UpdateStationOrderStatusRequest updateDTO
+                = new UpdateStationOrderStatusRequest();
         updateDTO.setStatus(OrderStatus.IN_PROGRESS);
 
-        StationOrderResponseDTO result = service.updateStatus(orderEntity.getId(), updateDTO);
-        assertNotNull(result);
-        assertEquals(OrderStatus.CREATED, result.getStatus()); // mapper mock mantiene mismo status simulado
+        StationOrderResponse result
+                = service.updateStatus(orderEntity.getId(), updateDTO);
+
+        assertEquals(OrderStatus.IN_PROGRESS, result.getStatus());
     }
 
     @Test
     void getOrders_NoResults_ShouldThrow() {
-        when(repository.findAll(PageRequest.of(0,10, Sort.by(Sort.Direction.DESC,"createdAt"))))
+
+        when(repository.findAll(any(PageRequest.class)))
                 .thenReturn(Page.empty());
 
         assertThrows(ResourceNotFoundException.class,
